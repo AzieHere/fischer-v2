@@ -10,22 +10,22 @@ import tkinter as tk
 import matplotlib.pyplot as plt
 
 
-def rgb_bgr(r, g, b):
+def bgr(b, g, r):
     return np.array([b, g, r], dtype=np.int16)
 
 
 RODS = {
     "default": {
-        "fish": (rgb_bgr(67, 75, 91), 924),
-        "arrows": (rgb_bgr(132, 133, 135), 924),
+        "fish": (bgr(91, 75, 67), 924),
+        "arrows": (bgr(135, 133, 132), 924),
         "bar": (
-            rgb_bgr(241, 241, 241),
-            rgb_bgr(241, 241, 241),
+            bgr(241, 241, 241),
+            bgr(241, 241, 241),
             924,
         ),
         "click": (
-            rgb_bgr(241, 241, 241),
-            rgb_bgr(104, 123, 141),
+            bgr(241, 241, 241),
+            bgr(141, 123, 104),
             818,
         ),
     }
