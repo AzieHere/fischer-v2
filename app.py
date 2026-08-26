@@ -4,34 +4,13 @@ import keyboard
 import mouse
 import dxcam
 import ctypes
+import configparser
 import numpy as np
 import tkinter as tk
 
 import matplotlib.pyplot as plt
 
-
-def bgr(b, g, r):
-    return np.array([b, g, r], dtype=np.int16)
-
-
-RODS = {
-    "default": {
-        "fish": (bgr(91, 75, 67), 924),
-        "arrows": (bgr(135, 133, 132), 924),
-        "bar": (
-            bgr(241, 241, 241),
-            bgr(241, 241, 241),
-            924,
-        ),
-        "click": (
-            bgr(241, 241, 241),
-            bgr(141, 123, 104),
-            818,
-        ),
-    }
-}
-
-ROD = RODS["default"]
+ROD = "default"
 
 REGION = (567, 800, 1353, 945)
 BORDERS = (572, 1348)
@@ -42,7 +21,9 @@ GUI_REFRESH = 16
 KP = 0.9
 KD = 0.4
 
-fishing = threading.Event()
+graph_time = []
+graph_fish = []
+graph_bar = []
 
 trackers = {}
 gui_data = {
@@ -58,42 +39,27 @@ gui_default = gui_data.copy()
 gui_lock = threading.Lock()
 gui_after = None
 
-graph_time = []
-graph_fish = []
-graph_bar = []
+fishing = threading.Event()
+config = configparser.ConfigParser()
 
 root = tk.Tk()
 camera = dxcam.create(output_color="BGRA", region=REGION)
-camera.start(target_fps=FPS, video_mode=True)
 
 get_frame = camera.get_latest_frame_view
 is_fishing = fishing.is_set
 is_pressed = mouse.is_pressed
 
 
-def press():
-    if not is_pressed():
-        mouse.press()
+def init():
+    config.read(f"rods/{ROD}.ini")
+    camera.start(target_fps=FPS, video_mode=True)
 
+    setup_gui()
+    update_gui()
 
-def release():
-    if is_pressed():
-        mouse.release()
+    setup_hotkeys()
 
-
-def search_row(frame, y, color, tolerance=5):
-    row = frame[y, :, :3]
-    diff = np.abs(row - color)
-
-    return np.flatnonzero(np.all(diff <= tolerance, axis=1))
-
-
-def squared_dist(a, b):
-    d0 = int(a[0]) - int(b[0])
-    d1 = int(a[1]) - int(b[1])
-    d2 = int(a[2]) - int(b[2])
-
-    return d0 * d0 + d1 * d1 + d2 * d2
+    root.mainloop()
 
 
 def fish():
@@ -294,6 +260,35 @@ def reel():
         last_time = now
 
 
+def bgr(b, g, r):
+    return np.array([b, g, r], dtype=np.int16)
+
+
+def search_row(frame, y, color, tolerance=5):
+    row = frame[y, :, :3]
+    diff = np.abs(row - color)
+
+    return np.flatnonzero(np.all(diff <= tolerance, axis=1))
+
+
+def squared_dist(a, b):
+    d0 = int(a[0]) - int(b[0])
+    d1 = int(a[1]) - int(b[1])
+    d2 = int(a[2]) - int(b[2])
+
+    return d0 * d0 + d1 * d1 + d2 * d2
+
+
+def press():
+    if not is_pressed():
+        mouse.press()
+
+
+def release():
+    if is_pressed():
+        mouse.release()
+
+
 def tracker(tracker_id, key, y=880, color="red"):
     win = tk.Toplevel(root)
 
@@ -420,9 +415,4 @@ def exit_program():
     root.after(0, stop)
 
 
-setup_gui()
-update_gui()
-
-setup_hotkeys()
-
-root.mainloop()
+init()
