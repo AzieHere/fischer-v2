@@ -1,4 +1,4 @@
-import win32gui
+import win32gui  # type: ignore
 
 
 def is_active():
