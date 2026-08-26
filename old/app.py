@@ -1,25 +1,24 @@
-import time
-import threading
-import keyboard
-import mouse
-import dxcam
-import ctypes
-import configparser
+import time, ctypes, keyboard, mouse, dxcam, win32gui
+
 import numpy as np
 import tkinter as tk
 
+from threading import Thread, Lock, Event
+from configparser import ConfigParser
+
 import matplotlib.pyplot as plt
 
-ROD = "default"
+ACTIVE_ROD = "default"
+ROD = {}
+
+KP = 0.9
+KD = 0.4
 
 REGION = (567, 800, 1353, 945)
 BORDERS = (572, 1348)
 
 FPS = 75
 GUI_REFRESH = 16
-
-KP = 0.9
-KD = 0.4
 
 graph_time = []
 graph_fish = []
@@ -31,16 +30,16 @@ gui_data = {
     "bar": 0,
     "control": 0,
     "error": 0,
-    "output": 0.0,
+    "output": 0,
     "state": "none",
 }
 
 gui_default = gui_data.copy()
-gui_lock = threading.Lock()
+gui_lock = Lock()
 gui_after = None
 
-fishing = threading.Event()
-config = configparser.ConfigParser()
+fishing = Event()
+config = ConfigParser()
 
 root = tk.Tk()
 camera = dxcam.create(output_color="BGRA", region=REGION)
@@ -51,7 +50,10 @@ is_pressed = mouse.is_pressed
 
 
 def init():
-    config.read(f"rods/{ROD}.ini")
+    global ROD
+
+    ROD = load_rod(ACTIVE_ROD)
+
     camera.start(target_fps=FPS, video_mode=True)
 
     setup_gui()
@@ -65,12 +67,12 @@ def init():
 def fish():
     cast()
 
-    if not is_fishing():
+    if not is_running():
         return
 
     shake()
 
-    if not is_fishing():
+    if not is_running():
         return
 
     reel()
@@ -82,7 +84,7 @@ def cast():
     press()
     time.sleep(0.5)
 
-    if not is_pressed():
+    if is_running() and not is_pressed():
         cast()
 
     release()
@@ -95,6 +97,12 @@ def shake():
     mid_x = (end_x - start_x) // 2
 
     while is_fishing():
+        if not roblox_active():
+            fishing.clear()
+            cleanup()
+
+            return
+
         frame = get_frame()
 
         if frame is None:
@@ -130,6 +138,7 @@ def reel():
     last_bar = mid_x
 
     pulse = 0.05
+    search_time = 2
 
     last_error = 0
     last_vel = 0
@@ -138,12 +147,20 @@ def reel():
     arrow_error = 0
 
     last_time = time.perf_counter()
-    last_pulse = time.perf_counter()
+
+    last_pulse = last_time
+    last_found = last_time
 
     tracker(1, "fish", color="blue")
     tracker(2, "bar", color="red")
 
     while is_fishing():
+        if not roblox_active():
+            fishing.clear()
+            cleanup()
+
+            return
+
         frame = get_frame()
 
         if frame is None:
@@ -156,8 +173,12 @@ def reel():
 
         if fish_coords.size:
             fish = int(fish_coords[0])
-        else:
+            last_found = now
+        elif now - last_found < search_time:
             fish = last_fish
+        else:
+            # not found
+            pass
 
         left_coords = search_row(frame, bar_y, left_color)
         right_coords = search_row(frame, bar_y, right_color)
@@ -260,6 +281,37 @@ def reel():
         last_time = now
 
 
+def load_rod(name):
+    config.read(f"rods/{name}.ini")
+
+    def color(section, key):
+        values = config.get(section, key).split(",")
+        r, g, b = (int(v.strip()) for v in values)
+
+        return bgr(b, g, r)
+
+    return {
+        "fish": (
+            color("fish", "color"),
+            config.getint("fish", "y"),
+        ),
+        "arrows": (
+            color("arrows", "color"),
+            config.getint("arrows", "y"),
+        ),
+        "bar": (
+            color("bar", "color_left"),
+            color("bar", "color_right"),
+            config.getint("bar", "y"),
+        ),
+        "click": (
+            color("click", "color_off"),
+            color("click", "color_on"),
+            config.getint("click", "y"),
+        ),
+    }
+
+
 def bgr(b, g, r):
     return np.array([b, g, r], dtype=np.int16)
 
@@ -327,6 +379,7 @@ def setup_gui():
     root.iconbitmap(r"images/azwald.ico")
 
     root.attributes("-topmost", True)
+    root.resizable(False, False)
 
 
 def update_gui():
@@ -338,7 +391,7 @@ def update_gui():
     with gui_lock:
         data = gui_data.copy()
 
-    for win, key, y in trackers:
+    for win, key, y in trackers.values():
         win.geometry(f"+{int(data[key] - 10)}+{y}")
 
     gui_after = root.after(GUI_REFRESH, update_gui)
@@ -370,25 +423,40 @@ def graph_data():
     plt.show()
 
 
+def is_running():
+    return is_fishing() and roblox_active()
+
+
+def roblox_active():
+    win = win32gui.GetForegroundWindow()
+    return win32gui.GetWindowText(win) == "Roblox"
+
+
+def cleanup():
+    global gui_data
+
+    clear_trackers()
+    release()
+
+    gui_data = gui_default.copy()
+
+
 def toggle():
     global gui_data
 
     if is_fishing():
         fishing.clear()
-        clear_trackers()
-        release()
-
-        gui_data = gui_default.copy()
+        cleanup()
 
         return
+    elif roblox_active():
+        fishing.set()
 
-    fishing.set()
+        graph_time.clear()
+        graph_bar.clear()
+        graph_fish.clear()
 
-    graph_time.clear()
-    graph_bar.clear()
-    graph_fish.clear()
-
-    threading.Thread(target=fish, daemon=True).start()
+        Thread(target=fish, daemon=True).start()
 
 
 def stop():
