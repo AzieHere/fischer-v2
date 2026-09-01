@@ -1,4 +1,4 @@
-import win32gui  # type: ignore
+import win32gui
 
 import numpy as np
 import os
