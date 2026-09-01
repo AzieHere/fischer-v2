@@ -1,43 +1,26 @@
-import ctypes
 import tkinter as tk
-
 import dxcam
+import config
 
-from config import ACTIVE_ROD, REGION, FPS
+from utils import setup_cwd, get_active_rod
+
 from fishing import FishingController
 from state import State
 from ui import UI
 
 
 def main():
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("azie.fischer")
+    setup_cwd()
 
     root = tk.Tk()
-
     state = State()
 
-    camera = dxcam.create(
-        output_color="BGRA",
-        region=REGION,
-    )
+    camera = dxcam.create(output_color="BGRA", region=config.REGION)
 
-    fishing = FishingController(
-        camera=camera,
-        state=state,
-        rod_name=ACTIVE_ROD,
-    )
+    fishing = FishingController(camera=camera, state=state, rod_name=get_active_rod())
+    ui = UI(root=root, state=state, fishing=fishing)
 
-    ui = UI(
-        root=root,
-        state=state,
-        fishing=fishing,
-    )
-
-    camera.start(
-        target_fps=FPS,
-        video_mode=True,
-    )
-
+    camera.start(target_fps=config.FPS, video_mode=True)
     ui.start()
 
     try:

@@ -1,1 +1,4 @@
 venv
+.vscode
+src/__pycache__
+src/temp

@@ -1,10 +1,11 @@
 import time
-from threading import Thread
+import config
 
-from config import KP, KD, REGION, BORDERS, load_rod
-from input import press, release, is_pressed, press_enter
-from roblox import is_active
+from threading import Thread, Timer
 from vision import Vision
+
+from utils import is_roblox_active, load_rod, bgrt
+from input import press, release, is_pressed, press_enter
 
 
 class FishingController:
@@ -12,7 +13,12 @@ class FishingController:
         self.camera = camera
         self.state = state
         self.vision = Vision(camera)
+
+        self.rod_name = rod_name
         self.rod = load_rod(rod_name)
+
+        self.kp = config.KP
+        self.kd = config.KD
 
         self.thread = None
 
@@ -20,7 +26,7 @@ class FishingController:
         if self.state.fishing.is_set():
             return
 
-        if not is_active():
+        if not is_roblox_active():
             return
 
         self.state.fishing.set()
@@ -38,7 +44,7 @@ class FishingController:
         release()
 
     def running(self):
-        return self.state.fishing.is_set() and is_active()
+        return self.state.fishing.is_set() and is_roblox_active()
 
     def fish(self):
         try:
@@ -54,6 +60,7 @@ class FishingController:
 
             self.reel()
 
+            Timer(config.CAUGHT_SEARCH, self.fish)
         finally:
             self.state.fishing.clear()
             release()
@@ -62,16 +69,15 @@ class FishingController:
         press()
         time.sleep(0.5)
 
-        while self.running() and not is_pressed():
-            press()
-            time.sleep(0.05)
+        if self.running() and not is_pressed():
+            self.cast()
 
         release()
 
     def shake(self):
         fish_color, fish_y = self.rod["fish"]
 
-        start_x, start_y, end_x, end_y = REGION
+        start_x, start_y, end_x, end_y = config.REGION
         mid_x = (end_x - start_x) // 2
 
         while self.running():
@@ -80,24 +86,25 @@ class FishingController:
             if frame is None:
                 continue
 
-            color = frame[fish_y - start_y, mid_x, :3]
+            color = frame[fish_y - start_y, mid_x]
 
             if self.vision.squared_dist(color, fish_color) == 0:
                 return
 
             press_enter()
-            time.sleep(0.25)
+            time.sleep(0.3)
 
     def reel(self):
-        start_x, start_y, end_x, end_y = REGION
+        caught_color = bgrt(*config.CAUGHT_COLOR)
+        caught_y = config.CAUGHT_Y
+        caught_search = config.CAUGHT_SEARCH
 
-        left_border, right_border = BORDERS
+        start_x, start_y, end_x, end_y = config.REGION
+        left_border, right_border = config.BORDERS
 
         fish_color, fish_screen_y = self.rod["fish"]
         arrow_color, arrow_screen_y = self.rod["arrows"]
-
         left_color, right_color, bar_screen_y = self.rod["bar"]
-
         off_color, on_color, click_screen_y = self.rod["click"]
 
         click_y = click_screen_y - start_y
@@ -105,20 +112,14 @@ class FishingController:
         mid_x = (end_x - start_x) // 2
         half_width = (right_border - left_border) // 2
 
-        last_fish = mid_x
-        last_bar = mid_x
-        last_error = 0
-        last_vel = 0
+        last_fish = last_bar = mid_x
+        last_error = control = arrow_error = 0
+
+        last_time = last_pulse = last_found = time.perf_counter()
 
         pulse = 0.05
-        search_time = 2
 
-        control = 0
-        arrow_error = 0
-
-        last_time = time.perf_counter()
-        last_pulse = last_time
-        last_found = last_time
+        self.state.reeling.set()
 
         while self.running():
             frame = self.vision.get_frame()
@@ -126,27 +127,31 @@ class FishingController:
             if frame is None:
                 continue
 
-            now = time.perf_counter()
-
-            dt = max(
-                now - last_time,
-                0.001,
-            )
-
             fish_coords = self.vision.search_row(frame, fish_screen_y, fish_color)
+
+            fish = last_fish
 
             if fish_coords.size:
                 fish = int(fish_coords[0])
                 last_found = now
 
-            elif now - last_found < search_time:
-                fish = last_fish
-
             else:
-                fish = last_fish
+                caught_coords = self.vision.search_row(frame, caught_y, caught_color)
+
+                if caught_coords.size > 0:
+                    self.state.reeling.clear()
+                    self.state.data["caught"] += 1
+                    return
+
+                if now - last_found >= caught_search:
+                    self.state.reeling.clear()
+                    self.state.data["missed"] += 1
+                    return
 
             left_coords = self.vision.search_row(frame, bar_screen_y, left_color)
             right_coords = self.vision.search_row(frame, bar_screen_y, right_color)
+
+            bar = last_bar
 
             if left_coords.size and right_coords.size:
                 left = int(left_coords[0])
@@ -163,7 +168,7 @@ class FishingController:
                     frame, arrow_screen_y, arrow_color
                 )
 
-                pixel = frame[click_y, mid_x, :3]
+                pixel = frame[click_y, mid_x]
 
                 on_dist = self.vision.squared_dist(pixel, on_color)
                 off_dist = self.vision.squared_dist(pixel, off_color)
@@ -173,16 +178,19 @@ class FishingController:
                         bar = int(arrow_coords[-1]) + arrow_error - control
                     else:
                         bar = int(arrow_coords[0]) - arrow_error + control
-                else:
-                    bar = last_bar + int(last_vel * dt)
 
-            velocity = (bar - last_bar) / dt
+            now = time.perf_counter()
+
+            dt = max(
+                now - last_time,
+                0.001,
+            )
 
             error = fish - bar
             derivative = (error - last_error) / dt
 
-            output = KP * error + KD * derivative
-            deadzone = control * 0.1
+            output = self.kp * error + self.kd * derivative
+            deadzone = control * 0.25
 
             fish_screen = start_x + fish
 
@@ -190,7 +198,7 @@ class FishingController:
             right_edge = right_border - fish_screen
 
             edge_range = min(
-                control * 1.25,
+                control * 1.5,
                 half_width - 10,
             )
 
@@ -240,5 +248,6 @@ class FishingController:
             last_fish = fish
             last_bar = bar
             last_error = error
-            last_vel = velocity
             last_time = now
+
+        self.state.reeling.clear()

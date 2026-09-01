@@ -1,6 +1,5 @@
 import numpy as np
-
-from config import REGION
+import config
 
 
 class Vision:
@@ -12,12 +11,13 @@ class Vision:
 
     @staticmethod
     def search_row(frame, y, color, tolerance=5):
-        start_y = REGION[1]
+        start_y = config.REGION[1]
+        tolerance = color[3]
 
         y -= start_y
 
         row = frame[y, :, :3]
-        diff = np.abs(row - color)
+        diff = np.abs(row - color[:3])
 
         return np.flatnonzero(np.all(diff <= tolerance, axis=1))
 

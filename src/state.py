@@ -4,15 +4,15 @@ from threading import Event, Lock
 class State:
     def __init__(self):
         self.fishing = Event()
+        self.reeling = Event()
         self.lock = Lock()
 
         self.data = {
             "fish": 0,
             "bar": 0,
             "control": 0,
-            "error": 0,
-            "output": 0,
-            "state": "none",
+            "caught": 0,
+            "missed": 0,
         }
 
         self.graph_time = []
