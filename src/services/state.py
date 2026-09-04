@@ -7,25 +7,26 @@ class State:
         self.reeling = Event()
         self.lock = Lock()
 
-        self.data = {
+        self.gui_data = {
             "fish": 0,
             "bar": 0,
             "control": 0,
             "caught": 0,
             "missed": 0,
+            "status": "idle",
         }
 
         self.graph_time = []
         self.graph_fish = []
         self.graph_bar = []
 
-    def update(self, **values):
+    def update_gui(self, **values):
         with self.lock:
-            self.data.update(values)
+            self.gui_data.update(values)
 
     def get_data(self):
         with self.lock:
-            return self.data.copy()
+            return self.gui_data.copy()
 
     def clear_graph(self):
         with self.lock:

@@ -1,12 +1,14 @@
 import tkinter as tk
+
 import dxcam
+
 import config
 
-from utils import setup_cwd, get_active_rod
-
-from fishing import FishingController
-from state import State
+from services.fishing import FishingController
+from services.state import State
 from ui import UI
+from utils.helpers import setup_cwd
+from utils.rods import get_active_rod
 
 
 def main():

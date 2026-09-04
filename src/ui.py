@@ -1,10 +1,13 @@
 import tkinter as tk
+from tkinter import ttk
+
 import matplotlib.pyplot as plt
+
 import config
 
-from tkinter import ttk
-from input import setup_hotkeys, remove_hotkeys
-from utils import is_roblox_active, load_rod, get_rods
+from services.input import is_pressed, setup_hotkeys
+from utils.helpers import is_roblox_active
+from utils.rods import Rod, get_rods
 
 
 class UI:
@@ -19,11 +22,11 @@ class UI:
         self.setup_controls()
         self.setup_table()
 
-        setup_hotkeys(self.toggle, self.show_graph, self.exit)
+        setup_hotkeys(self.toggle, self.show_graph)
 
     def setup_window(self):
-        self.root.title("azie's fischer v2")
-        self.root.geometry("200x200")
+        self.root.title("azie's fischer v2.1.0")
+        self.root.geometry("200x220")
 
         self.root.resizable(False, False)
 
@@ -37,7 +40,7 @@ class UI:
         ttk.Label(frame, text="rod", width=5).grid(row=0, column=0)
 
         rods = get_rods()
-        current_rod = self.fishing.rod_name
+        current_rod = self.fishing.rod.name
 
         self.rod_dropdown = ttk.Combobox(
             frame,
@@ -69,8 +72,8 @@ class UI:
         self.kp_entry.bind("<Return>", self.focus_root)
         self.kd_entry.bind("<Return>", self.focus_root)
 
-        self.kp_entry.bind("<FocusOut>", self.update_pid)
-        self.kd_entry.bind("<FocusOut>", self.update_pid)
+        self.kp_entry.bind("<FocusOut>", self.update_controller)
+        self.kd_entry.bind("<FocusOut>", self.update_controller)
 
     def focus_root(self, event=None):
         self.root.focus_set()
@@ -84,10 +87,9 @@ class UI:
         if self.state.fishing.is_set():
             self.fishing.stop()
 
-        self.fishing.rod_name = rod_name
-        self.fishing.rod = load_rod(rod_name)
+        self.fishing.rod = Rod(rod_name)
 
-    def update_pid(self, event=None):
+    def update_controller(self, event=None):
         try:
             self.fishing.kp = float(self.kp_entry.get())
             self.fishing.kd = float(self.kd_entry.get())
@@ -119,6 +121,7 @@ class UI:
     def update_table(self, data):
         caught = data["caught"]
         missed = data["missed"]
+        status = data["status"]
         total = caught + missed
 
         if total > 0:
@@ -128,6 +131,8 @@ class UI:
             success_rate = "N/A"
 
         lines = [
+            f"status: {status}",
+            "",
             f"caught: {caught}",
             f"missed: {missed}",
             "",
@@ -182,6 +187,7 @@ class UI:
                 return
 
             if not is_roblox_active():
+                self.fishing.stop()
                 self.cleanup()
 
             data = self.state.get_data()
@@ -205,13 +211,11 @@ class UI:
 
     def cleanup(self):
         self.clear_trackers()
-        self.state.update(
+        self.state.update_gui(
             fish=0,
             bar=0,
             control=0,
-            error=0,
-            output=0,
-            state="none",
+            status="idle",
         )
 
     def show_graph(self):
@@ -239,11 +243,3 @@ class UI:
         plt.legend()
         plt.grid()
         plt.show()
-
-    def exit(self):
-        self.fishing.stop()
-        self.clear_trackers()
-
-        remove_hotkeys()
-
-        self.root.destroy()
