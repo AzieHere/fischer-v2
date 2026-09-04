@@ -25,7 +25,7 @@ class UI:
         setup_hotkeys(self.toggle, self.show_graph)
 
     def setup_window(self):
-        self.root.title("azie's fischer v2.1.0")
+        self.root.title(f"azie's fischer v{config.VERSION}")
         self.root.geometry("200x220")
 
         self.root.resizable(False, False)

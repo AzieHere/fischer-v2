@@ -1,3 +1,5 @@
+VERSION = "2.0.0"
+
 FPS = 240
 GUI_REFRESH = 16
 
