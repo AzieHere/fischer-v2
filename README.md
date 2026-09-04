@@ -1,4 +1,4 @@
-## azie's fischer 2.0.0
+## azie's fischer v2.0.0
 
 its a fisch macro ooooo wowww :O
 
