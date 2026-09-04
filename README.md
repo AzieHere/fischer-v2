@@ -2,4 +2,4 @@
 
 its a fisch macro ooooo wowww :O
 
-download the macro in [releases](https://github.com/AzieHere/fischer-v2/releases)
+download the macro [here](https://github.com/AzieHere/fischer-v2/releases/tag/fischer)
